@@ -1,0 +1,208 @@
+		; IP: Next Instruction Pointer (IP)-->W
+		; W : Address of the code to run
+
+	W	EQU $FE		    ; 2 bytes, an address
+	IP	EQU W -2
+	G2	EQU IP-2		; general purpose register
+	G1	EQU G2-2		; general purpose register
+	DTOP	EQU G1-2	; Stack TOP
+		
+		
+		
+		.ORG  $8000
+
+
+DEX2_NEXT:
+	DEX				; 2
+	DEX				; 2
+	; fall through NEXT
+
+NEXT:
+; (IP) --> W
+	LDA (IP)		; 5
+	STA W			; 3
+	LDY #1			; 2
+	LDA (IP),y		; 5
+	STA W+1			; 3
+	
+; IP+2 --> IP
+	CLC				; 2
+	LDA IP			; 3
+	ADC #2		    ; 2		A<-A+2
+	STA IP			; 3
+	BCC .skip		; 2
+	INC IP+1		; 5
+.skip:
+	JMP (W)			; 5
+
+					; 35/40 cycles
+
+
+SWAP_:
+	LDA 2,X			; 4
+	LDY 4,X			; 4
+	STY 2,X			; 4
+	STA 4,X			; 4
+	LDA 3,X			; 4
+	LDY 5,X			; 4
+	STY 3,X			; 4
+	STA 5,X			; 4
+	JMP NEXT		; 3
+					; 35 cycles
+ROT_:
+
+; ( x y z -- y z x )
+; X, stack 2 -> W
+	LDA 6,X
+	STA W
+	LDA 7,X
+	STA W+1
+; Y, stack 1 -> stack 2
+	LDA 4,X
+	STA 6,X
+	LDA 5,X
+	STA 7,X
+; Z, stack 0 -> stack 1
+	LDA 2,X
+	STA 4,X
+	LDA 3,X
+	STA 5,X
+; W --> Stack 0
+	LDA W
+	STA 2,X
+	LDA W+1
+	STA 3,X
+	JMP NEXT
+	
+OVER_:
+; ( x y -- x y x )
+	LDA 4,X				; 4
+	STA 0,X				; 4
+	LDA 5,X				; 4
+	STA 1,X				; 4
+	JMP DEX2_NEXT		; 3 (+4)
+
+
+DUP_:
+	LDA 2,X
+	STA 0,X
+	LDA 3,X
+	STA 1,X
+	JMP DEX2_NEXT	
+
+ADD_:
+	CLC				; 2
+	LDA 2,X			; 4
+	ADC 4,X			; 4
+	STA 4,X			; 4
+	LDA 3,X			; 4
+	ADC 5,X			; 4
+	STA 5,X			; 4
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+					; 35 cycles
+
+DROP_:
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+
+SUB_:
+	SEC				; 2
+	LDA 4,X			; 4
+	SBC 2,X			; 4 
+	STA 4,X			; 4
+	LDA 5,X			; 4
+	SBC 3,X			; 4
+	STA 5,X			; 4
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+					; 35 cycles
+FETCH_:
+; @ ( ADDR -- value ) 
+; We read the data at the address on the 
+; stack and put the value on the stack
+	; copy address from stack to W
+	LDA 2,X	; LO
+	STA W
+	LDA 3,X	; HI
+	STA W+1
+	; Read data at (W) and save
+	; in the TOS
+	LDA (W)
+	STA 2,X
+	LDY #1
+	LDA (W),y
+	STA 3,X
+	JMP NEXT
+
+
+STORE_:
+; ! ( value ADDR -- )
+	; copy the address to W
+	LDA 2,X	; LO
+	STA W
+	LDA 3,X	; HI
+	STA W+1
+	; save the value to (W)
+	; LO
+	LDA 4,X
+	STA (W)
+	; HI
+	LDY #1
+	LDA 5,X
+	STA (W),y
+end_do_STORE:		; used by CSTORE (below)
+	INX
+	INX
+	;INX       ; INX INX NEXT is do_DROP
+	;INX
+	;JMP NEXT 	
+	JMP do_DROP
+	
+
+
+AND_:
+; ( a b -- a&b ) bitwise AND
+	LDA 2,X
+	AND 4,X
+	STA 4,X
+	LDA 3,X
+	AND 5,X
+	STA 5,X
+	JMP do_DROP
+
+
+OR_:
+; ( a b -- a|b ) bitwise OR
+	LDA 2,X
+	ORA 4,X
+	STA 4,X
+	LDA 3,X
+	ORA 5,X
+	STA 5,X
+	JMP do_DROP
+	
+XOR_:
+; ( a b -- a^b ) bitwise XOR
+	LDA 2,X
+	EOR 4,X
+	STA 4,X
+	LDA 3,X
+	EOR 5,X
+	STA 5,X
+	JMP do_DROP	
+
+NOT_:
+; ( a -- not(a) ) bitwise NOT
+	LDA 2,X
+	EOR #$FF
+	STA 2,X
+	LDA 3,X
+	EOR #$FF
+	STA 3,X
+	JMP NEXT
+	
+	
