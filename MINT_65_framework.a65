@@ -1,0 +1,504 @@
+; MINT-65 Framework
+
+; Ken Boak 27th December 2021
+
+
+.engine my6502
+
+ACIA         =  $A000 
+ACIACONTROL  =  ACIA+0 
+ACIASTATUS   =  ACIA+0 
+ACIADATA     =  ACIA+1 
+
+; Other Variables
+		                ; W : Address of the code to run
+	W	EQU $FE		    ; 2 bytes, an address
+	IP	EQU W -2        ; IP: Next Instruction Pointer (IP)-->W
+	G2	EQU IP-2		; general purpose register
+	G1	EQU G2-2		; general purpose register
+	DTOP	EQU G1-2	; Stack TOP
+
+TIB       EQU  $0200         ;  Terminal Input Buffer to $027F
+
+          .ORG    $FFFC 
+          
+          DW      reset 
+          DW      reset
+
+.org $f000
+
+RESET:          
+                LDX     #$FF 
+                TXS     
+                LDA     #$15
+                STA     ACIAControl 
+
+                LDY     #0 
+Banner:     
+                LDA     Message,Y
+                BEQ     NEXTCHAR
+                JSR     SEROUT
+                INY
+                BNE     Banner
+                JMP     CRLF
+          
+NEXTCHAR:       LDA     ACIAStatus    ; Wait for character
+                AND     #1
+                BEQ     NEXTCHAR
+                LDA     ACIAData 
+          
+                STA TIB,Y             ; Add to text buffer.
+                INY                   ; increment the TIB pointer
+                JSR ECHO              ; Display character.
+                CMP #$0D              ; CR?
+                BNE NEXTCHAR          ; Not a CR.
+                LDA #$0D
+                JSR ECHO              ; Display character.
+                LDA #$0A
+                JSR ECHO 
+          
+                LDY #$00              ; Reset text index.
+                LDA #$00              ; For XAM mode.
+                
+Printbuf:       LDA     TIB,Y
+                CMP      #$0D        ; CR?
+                BEQ     CRLF       
+                JSR     SEROUT
+                INY
+                JMP     Printbuf
+                
+CRLF:           LDA #$0D              ; CR
+                JSR ECHO              ; Display character.
+                LDA #$0A              ; LF
+                JSR ECHO 
+                LDY     #0            ; Reset Y to start of TIB
+                JMP     NEXTCHAR
+                
+          
+          
+Message:   
+          DB      $0C,"MINT-65 V1.0",$0D,$0A,$00 
+          
+          
+ECHO:                     ; Send character to the terminal
+SEROUT:         PHA
+SO_WAIT:        LDA     ACIAStatus
+                AND     #2
+                BEQ     SO_WAIT
+                PLA
+                STA     ACIAData
+                RTS
+                
+                
+DEX2_NEXT:
+	            DEX				; 2
+	            DEX				; 2
+	; fall through NEXT
+
+NEXT:
+; (IP) --> W
+	            LDA (IP)		; 5
+	            STA W			; 3
+	            LDY #1			; 2
+	            LDA (IP),y		; 5
+	            STA W+1			; 3
+	
+; IP+2 --> IP
+            	CLC				; 2
+	            LDA IP			; 3
+	            ADC #2		    ; 2		A<-A+2
+            	STA IP			; 3
+	            BCC skip		; 2
+	            INC IP+1		; 5
+skip:
+	            JMP (W)			; 5
+
+					; 35/40 cycles                
+                
+        .align $0100
+        
+opcodes:
+; ***********************************************************************
+; Initial values for user mintVars		
+; ***********************************************************************		
+        DB    lsb(exit_)    ;   NUL 
+        DB    lsb(nop_)     ;   SOH 
+        DB    lsb(nop_)     ;   STX 
+        DB    lsb(etx_)     ;   ETX 
+        DB    lsb(nop_)     ;   EOT 
+        DB    lsb(nop_)     ;   ENQ 
+        DB    lsb(nop_)     ;   ACK 
+        DB    lsb(nop_)     ;   BEL 
+        DB    lsb(nop_)     ;   BS  
+        DB    lsb(nop_)     ;   TAB 
+        DB    lsb(nop_)     ;   LF  
+        DB    lsb(nop_)     ;   VT  
+        DB    lsb(nop_)     ;   FF  
+        DB    lsb(nop_)     ;   CR  
+        DB    lsb(nop_)     ;   SO  
+        DB    lsb(nop_)     ;   SI  
+        DB    lsb(nop_)     ;   DLE 
+        DB    lsb(nop_)     ;   DC1 
+        DB    lsb(nop_)     ;   DC2 
+        DB    lsb(nop_)     ;   DC3 
+        DB    lsb(nop_)     ;   DC4 
+        DB    lsb(nop_)     ;   NAK 
+        DB    lsb(nop_)     ;   SYN 
+        DB    lsb(nop_)     ;   ETB 
+        DB    lsb(nop_)     ;   CAN 
+        DB    lsb(nop_)     ;   EM  
+        DB    lsb(nop_)     ;   SUB 
+        DB    lsb(nop_)     ;   ESC 
+        DB    lsb(nop_)     ;   FS  
+        DB    lsb(nop_)     ;   GS  
+        DB    lsb(nop_)     ;   RS  
+        DB    lsb(nop_)     ;   US  
+        DB    lsb(nop_)     ;   SP
+        DB    lsb(store_)   ;   !            
+        DB    lsb(dup_)     ;   "
+        DB    lsb(hex_)    ;    #
+        DB    lsb(swap_)   ;    $            
+        DB    lsb(over_)   ;    %            
+        DB    lsb(and_)    ;    &
+        DB    lsb(drop_)   ;    '
+        DB    lsb(begin_)  ;    (        
+        DB    lsb(again_)  ;    )
+        DB    lsb(mul_)    ;    *            
+        DB    lsb(add_)    ;    +
+        DB    lsb(hexp_)   ;    ,            
+        DB    lsb(sub_)    ;    -
+        DB    lsb(dot_)    ;    .
+        DB    lsb(div_)    ;    /
+        DB    lsb(num_)    ;    0            
+        DB    lsb(num_)    ;    1        
+        DB    lsb(num_)    ;    2            
+        DB    lsb(num_)    ;    3
+        DB    lsb(num_)    ;    4            
+        DB    lsb(num_)    ;    5            
+        DB    lsb(num_)    ;    6            
+        DB    lsb(num_)    ;    7
+        DB    lsb(num_)    ;    8            
+        DB    lsb(num_)    ;    9        
+        DB    lsb(def_)    ;    :        
+        DB    lsb(ret_)    ;    ;
+        DB    lsb(lt_)     ;    <
+        DB    lsb(eq_)     ;    =            
+        DB    lsb(gt_)     ;    >            
+        DB    lsb(getRef_) ;    ?
+        DB    lsb(fetch_)  ;    @    
+        DB    lsb(call_)   ;    A    
+        DB    lsb(call_)   ;    B
+        DB    lsb(call_)   ;    C
+        DB    lsb(call_)   ;    D    
+        DB    lsb(call_)   ;    E
+        DB    lsb(call_)   ;    F
+        DB    lsb(call_)   ;    G
+        DB    lsb(call_)   ;    H
+        DB    lsb(call_)   ;    I
+        DB    lsb(call_)   ;    J
+        DB    lsb(call_)   ;    K
+        DB    lsb(call_)   ;    L
+        DB    lsb(call_)   ;    M
+        DB    lsb(call_)   ;    N
+        DB    lsb(call_)   ;    O
+        DB    lsb(call_)   ;    P
+        DB    lsb(call_)   ;    Q
+        DB    lsb(call_)   ;    R
+        DB    lsb(call_)   ;    S
+        DB    lsb(call_)   ;    T
+        DB    lsb(call_)   ;    U
+        DB    lsb(call_)   ;    V
+        DB    lsb(call_)   ;    W
+        DB    lsb(call_)   ;    X
+        DB    lsb(call_)   ;    Y
+        DB    lsb(call_)   ;    Z
+        DB    lsb(arrDef_) ;    [
+        DB    lsb(alt_)    ;    \
+        DB    lsb(arrEnd_) ;    ]
+        DB    lsb(xor_)    ;    ^
+        DB    lsb(neg_)    ;    _
+        DB    lsb(str_)    ;    `            
+        DB    lsb(var_)    ;    a
+        DB    lsb(var_)    ;    b
+        DB    lsb(var_)    ;    c
+        DB    lsb(var_)    ;    d
+        DB    lsb(var_)    ;    e
+        DB    lsb(var_)    ;    f
+        DB    lsb(var_)    ;    g
+        DB    lsb(var_)    ;    h
+        DB    lsb(var_)    ;    i            
+        DB    lsb(var_)    ;    j
+        DB    lsb(var_)    ;    k
+        DB    lsb(var_)    ;    l
+        DB    lsb(var_)    ;    m
+        DB    lsb(var_)    ;    n
+        DB    lsb(var_)    ;    o
+        DB    lsb(var_)    ;    p
+        DB    lsb(var_)    ;    q            
+        DB    lsb(var_)    ;    r
+        DB    lsb(var_)    ;    s    
+        DB    lsb(var_)    ;    t
+        DB    lsb(var_)    ;    u
+        DB    lsb(var_)    ;    v
+        DB    lsb(var_)    ;    w
+        DB    lsb(var_)    ;    x
+        DB    lsb(var_)    ;    y
+        DB    lsb(var_)    ;    z
+        DB    lsb(shl_)    ;    {
+        DB    lsb(or_)     ;    |            
+        DB    lsb(shr_)    ;    }            
+        DB    lsb(inv_)    ;    ~            
+        DB    lsb(nop_)    ;    backspace
+
+                
+        
+        .align $0100
+        
+exit_:    JMP exit   ;
+etx_:     JMP etx    ;
+nop_:     JMP noop   ;   SP
+store_:   JMP store  ;   !            
+dup_:     JMP dup    ;   "
+hex_:     JMP hex    ;    #
+swap_:    JMP swap   ;    $            
+over_:    JMP over   ;    %            
+and_:     JMP a_nd   ;    &
+drop_:    JMP drop   ;    '
+begin_:   JMP begin  ;    (        
+again_:   JMP again  ;    )
+mul_:     JMP mul    ;    *            
+add_:     JMP plus   ;    +
+hexp_:    JMP hexp   ;    ,            
+sub_:     JMP minus  ;    -
+dot_:     JMP dot    ;    .
+div_:     JMP div    ;    /
+num_:     JMP num    ;    0               
+def_:     JMP def    ;    :        
+ret_:     JMP ret    ;    ;
+lt_:      JMP lt     ;    <
+eq_:      JMP eq     ;    =            
+gt_:      JMP gt     ;    >            
+getRef_:  JMP getRef ;    ?
+fetch_:   JMP fetch  ;    @    
+call_:    JMP call   ;    A    
+arrDef_:  JMP arrDef ;    [
+alt_:     JMP alt    ;    \
+arrEnd_:  JMP arrEnd ;    ]
+xor_:     JMP xor    ;    ^
+neg_:     JMP neg    ;    _
+str_:     JMP str    ;    `            
+var_:     JMP var    ;    a
+shl_:     JMP shl    ;    {
+or_:      JMP ior    ;    |            
+shr_:     JMP shr    ;    }            
+inv_:     JMP inv    ;    ~ 
+
+;********************************************************************
+; Primitives
+;********************************************************************
+
+SWAP:
+	LDA 2,X			; 4
+	LDY 4,X			; 4
+	STY 2,X			; 4
+	STA 4,X			; 4
+	LDA 3,X			; 4
+	LDY 5,X			; 4
+	STY 3,X			; 4
+	STA 5,X			; 4
+	JMP NEXT		; 3
+					; 35 cycles
+ROT:
+
+; ( x y z -- y z x )
+; X, stack 2 -> W
+	LDA 6,X
+	STA W			; 3
+	LDA 7,X
+	STA W+1			; 3
+; Y, stack 1 -> stack 2
+	LDA 4,X
+	STA 6,X
+	LDA 5,X
+	STA 7,X
+; Z, stack 0 -> stack 1
+	LDA 2,X
+	STA 4,X
+	LDA 3,X
+	STA 5,X
+; W --> Stack 0
+	LDA W
+	STA 2,X
+	LDA W+1
+	STA 3,X
+	JMP NEXT
+	
+OVER:
+; ( x y -- x y x )
+	LDA 4,X				; 4
+	STA 0,X				; 4
+	LDA 5,X				; 4
+	STA 1,X				; 4
+	JMP DEX2_NEXT		; 3 (+4)
+
+
+DUP:
+	LDA 2,X
+	STA 0,X
+	LDA 3,X
+	STA 1,X
+	JMP DEX2_NEXT	
+
+PLUS:
+	CLC				; 2
+	LDA 2,X			; 4
+	ADC 4,X			; 4
+	STA 4,X			; 4
+	LDA 3,X			; 4
+	ADC 5,X			; 4
+	STA 5,X			; 4
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+					; 35 cycles
+
+DROP:
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+
+MINUS:
+	SEC				; 2
+	LDA 4,X			; 4
+	SBC 2,X			; 4 
+	STA 4,X			; 4
+	LDA 5,X			; 4
+	SBC 3,X			; 4
+	STA 5,X			; 4
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+					; 35 cycles
+FETCH:
+; @ ( ADDR -- value ) 
+; We read the data at the address on the 
+; stack and put the value on the stack
+; copy address from stack to W
+	LDA 2,X			; 4 LO
+	STA W			; 3
+	LDA 3,X			; 4	HI
+	STA W+1			; 3
+	
+	; Read data at (W) and save in the TOS	
+	LDA (W)			; 5
+	STA 2,X			; 4
+	LDY #1			; 2
+	LDA (W),y		; 5
+	STA 3,X			; 4
+	JMP NEXT		; 3
+					; 37 cycles
+
+
+STORE:
+; ! ( value ADDR -- )
+	; copy the address to W
+	LDA 2,X			; 4	LO
+	STA W			; 3
+	LDA 3,X			; 4	HI
+	STA W+1			; 3
+	
+	; save the value to (W) LO
+	LDA 4,X			; 4
+	STA (W)			; 5 HI
+	LDY #1			; 2
+	LDA 5,X			; 4
+	STA (W),y		; 5
+end_do_STORE:		; used by CSTORE (below)
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+					; 43 cycles
+
+
+A_ND:
+; ( a b -- a&b ) bitwise AND
+	LDA 2,X			; 4
+	AND 4,X			; 4
+	STA 4,X			; 4
+	LDA 3,X			; 4
+	AND 5,X			; 4
+	STA 5,X			; 4
+	INX				; 3
+	INX				; 3
+	JMP NEXT		; 3
+					; 33 cycles
+
+
+IOR:
+; ( a b -- a|b ) bitwise OR
+	LDA 2,X
+	ORA 4,X
+	STA 4,X
+	LDA 3,X
+	ORA 5,X
+	STA 5,X
+	JMP DROP
+	
+XOR:
+; ( a b -- a^b ) bitwise XOR
+	LDA 2,X
+	EOR 4,X
+	STA 4,X
+	LDA 3,X
+	EOR 5,X
+	STA 5,X
+	JMP DROP	
+
+NOT:
+; ( a -- not(a) ) bitwise NOT
+	LDA 2,X
+	EOR #$FF
+	STA 2,X
+	LDA 3,X
+	EOR #$FF
+	STA 3,X
+	JMP NEXT
+
+exit:
+etx:
+noop:
+
+
+hex:
+
+
+
+
+begin:
+again:
+mul:
+
+hexp:
+
+dot:
+div:
+num:
+def:
+ret:
+lt:
+eq:
+gt:
+getRef:
+
+call:
+arrDef:
+alt:
+arrEnd:
+
+neg:
+str:
+var:
+shl:
+
+shr:
+inv:
