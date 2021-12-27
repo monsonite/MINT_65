@@ -1,0 +1,86 @@
+.engine my6502
+
+ACIA         =  $A000 
+ACIACONTROL  =  ACIA+0 
+ACIASTATUS   =  ACIA+0 
+ACIADATA     =  ACIA+1 
+
+; Other Variables
+		                ; W : Address of the code to run
+	W	EQU $FE		    ; 2 bytes, an address
+	IP	EQU W -2        ; IP: Next Instruction Pointer (IP)-->W
+	G2	EQU IP-2		; general purpose register
+	G1	EQU G2-2		; general purpose register
+	DTOP	EQU G1-2	; Stack TOP
+
+TIB       EQU  $0200         ;  Terminal Input Buffer to $027F
+
+          .ORG    $FFFC 
+          
+          DW      reset 
+          DW      reset
+
+.org $f000
+
+RESET:          
+                LDX     #$FF 
+                TXS     
+                LDA     #$15
+                STA     ACIAControl 
+
+                LDY     #0 
+Banner:     
+                LDA     Message,Y
+                BEQ     NEXTCHAR
+                JSR     SEROUT
+                INY
+                BNE     Banner
+                JMP     CRLF
+          
+NEXTCHAR:       LDA     ACIAStatus    ; Wait for character
+                AND     #1
+                BEQ     NEXTCHAR
+                LDA     ACIAData 
+          
+                STA TIB,Y             ; Add to text buffer.
+                INY                   ; increment the TIB pointer
+                JSR ECHO              ; Display character.
+                CMP #$0D              ; CR?
+                BNE NEXTCHAR          ; Not a CR.
+                LDA #$0D
+                JSR ECHO              ; Display character.
+                LDA #$0A
+                JSR ECHO 
+          
+                LDY #$00              ; Reset text index.
+                LDA #$00              ; For XAM mode.
+                
+Printbuf:       LDA     TIB,Y
+                CMP      #$0D        ; CR?
+                BEQ     CRLF       
+                JSR     SEROUT
+                INY
+                JMP     Printbuf
+                
+CRLF:           LDA #$0D              ; CR
+                JSR ECHO              ; Display character.
+                LDA #$0A              ; LF
+                JSR ECHO 
+                LDY     #0            ; Reset Y to start of TIB
+                JMP     NEXTCHAR
+                
+          
+          
+Message:   
+          DB      $0C,"MINT-65 V1.0",$0D,$0A,$00 
+          
+          
+ECHO:                     ; Send character to the terminal
+SEROUT:         PHA
+SO_WAIT:        LDA     ACIAStatus
+                AND     #2
+                BEQ     SO_WAIT
+                PLA
+                STA     ACIAData
+                RTS
+                

@@ -1,0 +1,11 @@
+cpu C6502
+
+memory.ram.from 0x0000
+memory.ram.to 0x0fff
+memory.rom.from 0xf000
+memory.rom.to 0xffff
+
+serial 6850
+serial.data 0xa001
+serial.control 0xa000
+serial.map 1
